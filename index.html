@@ -371,7 +371,7 @@ img{max-width:100%}
     <p>Pick what you want, tap Order, and send it over. Everything is made when you order it, so give us two or three days. We'll text you back as soon as it's ready.</p>
     <h2 style="margin-top:22px">Paying</h2>
     <p><strong>Nothing is due up front.</strong> Once we confirm your order, we&rsquo;ll send a follow-up email or text with our Zelle and Venmo details so you can pay whichever way suits you.</p>
-    <p>If you'd rather we mailed it, that's a flat <strong>$7</strong> anywhere in the country, however many you order &mdash; paid by Zelle or Venmo before it goes out.</p>
+    <p>We can mail it on orders of <strong>$10</strong> or more &mdash; a flat <strong>$9</strong> anywhere in the country, however many you order, paid by Zelle or Venmo before it goes out. Postage costs us nearly that much, so for one or two toys it's much better to pick them up.</p>
   </section>
 
   <footer>
@@ -400,21 +400,16 @@ img{max-width:100%}
     <input class="fi" id="fContact" type="text" placeholder="Phone number or email">
     <label class="fl">How should we get it to you?</label>
     <div class="delivery">
-      <button type="button" class="dbtn" id="dSchool" data-d="school" aria-pressed="true">
-        <span class="dt">Send it with the kids</span><span class="dp">Same school only</span>
-      </button>
-      <button type="button" class="dbtn" id="dHand" data-d="hand" aria-pressed="false">
+      <button type="button" class="dbtn" id="dHand" data-d="hand" aria-pressed="true">
         <span class="dt">I&rsquo;ll get it from you</span><span class="dp">We&rsquo;ll sort out when</span>
       </button>
       <button type="button" class="dbtn" id="dShip" data-d="ship" aria-pressed="false">
-        <span class="dt">Mail it</span><span class="dp">+$7</span>
+        <span class="dt">Mail it</span><span class="dp" id="shipNote">+$9</span>
       </button>
     </div>
-    <div id="schoolWrap">
-      <label class="fl" for="fSchool">Who should they hand it to?</label>
-      <input class="fi" id="fSchool" type="text" placeholder="Your child's name and their teacher">
-      <p class="sheet-note" style="margin-top:6px">Only pick this if your child goes to the same school as Laila and Zara &mdash; we&rsquo;ll check before we send anything in.</p>
-    </div>
+    <p class="sheet-note" id="shipMin" hidden style="margin-top:6px">
+      Mailing starts at $10 of toys &mdash; postage costs us nearly as much as the toys do.
+    </p>
     <div id="addrWrap" hidden>
       <label class="fl" for="fAddr">Where should we mail it?</label>
       <textarea class="fi" id="fAddr" placeholder="Street, city, state, ZIP"></textarea>
@@ -443,7 +438,8 @@ img{max-width:100%}
 
 <script>
   // ---- shop settings ----
-  var SHIPPING = 7;          // flat rate to mail an order
+  var SHIPPING = 9;          // flat rate to mail an order
+  var SHIP_MIN = 10;         // cart must reach this before mailing is offered
 
   // Where orders go. Paste your Formspree endpoint between the quotes, e.g.
   //   var ORDER_ENDPOINT = "https://formspree.io/f/abcdwxyz";
@@ -618,10 +614,10 @@ img{max-width:100%}
 
   function val(id){ var e = document.getElementById(id); return e ? e.value.trim() : ""; }
 
-  var delivery = "school";
+  var delivery = "hand";
 
   function grand(){
-    return total().sum + (delivery === "ship" ? SHIPPING : 0);
+    return total().sum + (delivery === "ship" && canShip() ? SHIPPING : 0);
   }
 
   function buildOrder(){
@@ -633,20 +629,18 @@ img{max-width:100%}
                 return l.n + "x " + l.it.name + extra + " - $" + (l.n * l.it.price);
               }).join("\n")
             + "\nToys: $" + t.sum;
-    if (delivery === "ship") txt += "\nShipping: $" + SHIPPING;
+    if (delivery === "ship" && canShip()) txt += "\nShipping: $" + SHIPPING;
     txt += "\nTotal: $" + grand()
         +  "\n\nName: " + (val("fName") || "___")
         +  "\nReach me at: " + (val("fContact") || "___");
     txt += delivery === "ship"
       ? "\nMail it to:\n" + (val("fAddr") || "___")
-      : delivery === "hand"
-        ? "\nI'll get it from you -- we'll sort out when"
-        : "\nSend it in with the kids at school\nHand it to: " + (val("fSchool") || "___");
+      : "\nI'll get it from you -- we'll sort out when";
     if (val("fComment")) txt += "\nComments: " + val("fComment");
     return txt;
   }
 
-  var DBTNS = ["dSchool","dHand","dShip"];
+  var DBTNS = ["dHand","dShip"];
   DBTNS.forEach(function(id){
     document.getElementById(id).addEventListener("click", function(){
       delivery = this.getAttribute("data-d");
@@ -655,7 +649,6 @@ img{max-width:100%}
         el.setAttribute("aria-pressed", el.getAttribute("data-d") === delivery ? "true" : "false");
       });
       document.getElementById("addrWrap").hidden   = delivery !== "ship";
-      document.getElementById("schoolWrap").hidden = delivery !== "school";
       refreshSheet();
     });
   });
@@ -664,17 +657,37 @@ img{max-width:100%}
   var sendBtn = document.getElementById("sendBtn");
   var fallback = document.getElementById("fallback");
 
+  function canShip(){ return total().sum >= SHIP_MIN; }
+
+  // keep the mail option, its note, and the current choice consistent with the cart
+  function syncShip(){
+    var ok = canShip();
+    var btn = document.getElementById("dShip");
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? "" : "0.45";
+    btn.style.cursor  = ok ? "" : "not-allowed";
+    document.getElementById("shipNote").textContent = ok ? "+$" + SHIPPING : "$" + SHIP_MIN + " minimum";
+    document.getElementById("shipMin").hidden = ok;
+    if (!ok && delivery === "ship"){          // they removed toys after choosing mail
+      delivery = "hand";
+      DBTNS.forEach(function(o){
+        var el = document.getElementById(o);
+        el.setAttribute("aria-pressed", el.getAttribute("data-d") === delivery ? "true" : "false");
+      });
+      document.getElementById("addrWrap").hidden = true;
+    }
+  }
+
   function refreshSheet(){
+    syncShip();
     var text = buildOrder();
     document.getElementById("orderText").textContent = text;
     var needAddr   = delivery === "ship"   && val("fAddr") === "";
-    var needSchool = delivery === "school" && val("fSchool") === "";
     var needWho    = val("fContact") === "";
-    sendBtn.disabled = !(val("fName") !== "" && !needWho && !needAddr && !needSchool);
+    sendBtn.disabled = !(val("fName") !== "" && !needWho && !needAddr);
     sendBtn.textContent = val("fName") === "" ? "Add your name first"
                         : needWho    ? "Add a phone or email"
                         : needAddr   ? "Add your address"
-                        : needSchool ? "Add your child's name"
                         : "Submit order";
   }
 
@@ -692,7 +705,7 @@ img{max-width:100%}
   document.getElementById("sheetClose").addEventListener("click", closeSheet);
   sheet.addEventListener("click", function(e){ if (e.target === sheet) closeSheet(); });
   document.addEventListener("keydown", function(e){ if (e.key === "Escape" && !sheet.hidden) closeSheet(); });
-  ["fName","fContact","fComment","fAddr","fSchool"].forEach(function(id){
+  ["fName","fContact","fComment","fAddr"].forEach(function(id){
     document.getElementById(id).addEventListener("input", refreshSheet);
   });
 
@@ -710,10 +723,7 @@ img{max-width:100%}
         return l.n + "x " + l.it.name + extra;
       }).join(", "),
       ghost_eyes: picked.ghost || "",
-      delivery: delivery === "ship" ? "Mail it"
-              : delivery === "hand" ? "I'll get it from you"
-              : "Send it with the kids at school",
-      hand_to: delivery === "school" ? val("fSchool") : "",
+      delivery: delivery === "ship" ? "Mail it" : "I'll get it from you",
       address: delivery === "ship" ? val("fAddr") : "",
       comments: val("fComment"),
       total: "$" + grand(),
